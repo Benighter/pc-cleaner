@@ -1,0 +1,42 @@
+{
+  "name": "pc-cleaner",
+  "version": "1.0.0",
+  "description": "An application to find and remove junk files on your PC",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/react": "^17.0.38",
+    "@types/react-dom": "^17.0.11",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2"
+  },
+  "devDependencies": {
+    "electron": "^17.0.0",
+    "electron-builder": "^22.14.13",
+    "electron-squirrel-startup": "^1.0.1"
+  },
+  "build": {
+    "appId": "com.pc-cleaner.app",
+    "productName": "PC Cleaner",
+    "files": [
+      "src/**/*",
+      "node_modules/**/*",
+      "package.json",
+      "public/**/*"
+    ],
+    "directories": {
+      "buildResources": "resources",
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
