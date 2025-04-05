@@ -480,41 +480,57 @@ function App() {
     switch (previewData.type) {
       case 'image':
         return React.createElement(
-          'img',
-          {
-            className: 'preview-image',
-            src: previewData.dataUrl,
-            alt: 'Preview'
-          }
+          'div',
+          { className: 'preview-image-container' },
+          React.createElement(
+            'img',
+            {
+              className: 'preview-image',
+              src: previewData.dataUrl,
+              alt: 'Preview'
+            }
+          )
         );
         
       case 'video':
         return React.createElement(
-          'video',
-          {
-            className: 'preview-video',
-            src: previewData.dataUrl,
-            controls: true,
-            autoPlay: false
-          }
+          'div',
+          { className: 'preview-media-container' },
+          React.createElement(
+            'video',
+            {
+              className: 'preview-video',
+              src: previewData.dataUrl,
+              controls: true,
+              autoPlay: false
+            }
+          )
         );
         
       case 'audio':
         return React.createElement(
-          'audio',
-          {
-            className: 'preview-audio',
-            src: previewData.dataUrl,
-            controls: true,
-            autoPlay: false
-          }
+          'div',
+          { className: 'preview-media-container' },
+          React.createElement(
+            'audio',
+            {
+              className: 'preview-audio',
+              src: previewData.dataUrl,
+              controls: true,
+              autoPlay: false
+            }
+          )
         );
         
       case 'text':
         return React.createElement(
-          'pre',
-          { className: 'preview-text' },
-          previewData.content
+          'div',
+          { className: 'preview-text-container' },
+          React.createElement(
+            'pre',
+            { className: 'preview-text' },
+            previewData.content
+          )
         );
         
       default:
