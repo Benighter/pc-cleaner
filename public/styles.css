@@ -359,4 +359,98 @@ input[type="checkbox"] {
     margin-top: 15px;
     max-height: 400px;
   }
+}
+
+.progress-container {
+  width: 100%;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  margin: 15px 0;
+  position: relative;
+  height: 20px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background-color: #3498db;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-text {
+  position: absolute;
+  width: 100%;
+  text-align: center;
+  color: #333;
+  font-size: 12px;
+  font-weight: bold;
+  mix-blend-mode: difference;
+  white-space: nowrap;
+}
+
+.scan-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.cancel-btn {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 14px;
+}
+
+.cancel-btn:hover {
+  background-color: #c0392b;
+}
+
+.scanning-info {
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.scanning-info-text {
+  font-size: 14px;
+  color: #666;
+}
+
+/* Override some existing styles for better UI during scanning */
+.loading.with-progress {
+  padding: 20px;
+  font-size: 18px;
+  color: #777;
+  text-align: center;
+}
+
+.spinner-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 15px;
+}
+
+/* Add a pulsating animation for the scanning text */
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+.scanning-label {
+  animation: pulse 1.5s infinite;
+  font-weight: bold;
+  color: #3498db;
+  margin-bottom: 10px;
 } 

@@ -7,8 +7,23 @@ contextBridge.exposeInMainWorld('electron', {
     selectFolder: () => ipcRenderer.invoke('select-folder'),
     scanFolder: (folderPath, oldThresholdDays) => 
       ipcRenderer.invoke('scan-folder', folderPath, oldThresholdDays),
+    cancelScan: () => ipcRenderer.invoke('cancel-scan'),
     deleteFiles: (filePaths) => ipcRenderer.invoke('delete-files', filePaths),
     getFilePreview: (filePath) => ipcRenderer.invoke('get-file-preview', filePath),
     openFile: (filePath) => ipcRenderer.invoke('open-file', filePath)
+  },
+  events: {
+    onScanProgress: (callback) => {
+      ipcRenderer.on('scan-progress', (event, data) => callback(data));
+    },
+    onScanBatch: (callback) => {
+      ipcRenderer.on('scan-batch', (event, data) => callback(data));
+    },
+    onScanComplete: (callback) => {
+      ipcRenderer.on('scan-complete', (event, data) => callback(data));
+    },
+    removeAllListeners: (channel) => {
+      ipcRenderer.removeAllListeners(channel);
+    }
   }
 }); 

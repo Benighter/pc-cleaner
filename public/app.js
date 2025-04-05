@@ -17,6 +17,87 @@ function App() {
   const [previewFile, setPreviewFile] = React.useState(null);
   const [previewData, setPreviewData] = React.useState(null);
   const [previewLoading, setPreviewLoading] = React.useState(false);
+  
+  // Progress state
+  const [progress, setProgress] = React.useState({
+    percent: 0,
+    processed: 0,
+    total: 0,
+    status: ''
+  });
+  const [scanCancelled, setScanCancelled] = React.useState(false);
+
+  // Register event listeners for scan progress and batches
+  React.useEffect(() => {
+    // Listen for progress updates
+    window.electron.events.onScanProgress((data) => {
+      setProgress({
+        percent: data.percent,
+        processed: data.processed,
+        total: data.total,
+        status: `Processing files: ${data.processed.toLocaleString()} of ${data.total.toLocaleString()}`
+      });
+    });
+    
+    // Listen for file batches
+    window.electron.events.onScanBatch((batchFiles) => {
+      setFiles(prevFiles => {
+        // Merge with existing files, avoiding duplicates
+        const newFiles = [...prevFiles];
+        const existingPaths = new Set(prevFiles.map(f => f.path));
+        
+        batchFiles.forEach(file => {
+          if (!existingPaths.has(file.path)) {
+            newFiles.push(file);
+          }
+        });
+        
+        // Calculate updated stats
+        updateStats(newFiles);
+        return newFiles;
+      });
+    });
+    
+    // Listen for scan completion
+    window.electron.events.onScanComplete((result) => {
+      setLoading(false);
+      
+      if (result.cancelled) {
+        setScanCancelled(true);
+        setProgress(prev => ({
+          ...prev,
+          status: 'Scan cancelled'
+        }));
+      } else {
+        setProgress(prev => ({
+          ...prev,
+          percent: 100,
+          status: 'Scan complete'
+        }));
+      }
+    });
+    
+    // Cleanup function to remove event listeners
+    return () => {
+      window.electron.events.removeAllListeners('scan-progress');
+      window.electron.events.removeAllListeners('scan-batch');
+      window.electron.events.removeAllListeners('scan-complete');
+    };
+  }, []);
+  
+  // Update stats based on files array
+  const updateStats = (filesArray) => {
+    const totalSize = filesArray.reduce((sum, file) => sum + file.size, 0);
+    const oldFiles = filesArray.filter(file => file.isOld);
+    const oldFilesSize = oldFiles.reduce((sum, file) => sum + file.size, 0);
+    
+    setStats({
+      totalFiles: filesArray.length,
+      totalSize: formatFileSize(totalSize),
+      oldFiles: oldFiles.length,
+      oldFilesSize: formatFileSize(oldFilesSize)
+    });
+  };
 
   // Handle folder selection
   const handleSelectFolder = async () => {
@@ -27,6 +108,14 @@ function App() {
       setSelectedFiles([]);
       setPreviewFile(null);
       setPreviewData(null);
+      // Reset progress state
+      setProgress({
+        percent: 0,
+        processed: 0,
+        total: 0,
+        status: ''
+      });
+      setScanCancelled(false);
     }
   };
 
@@ -39,27 +128,37 @@ function App() {
     setSelectedFiles([]);
     setPreviewFile(null);
     setPreviewData(null);
+    setScanCancelled(false);
+    
+    setProgress({
+      percent: 0,
+      processed: 0,
+      total: 0,
+      status: 'Preparing scan...'
+    });
     
     try {
-      const scannedFiles = await window.electron.fileSystem.scanFolder(selectedFolder, thresholdDays);
-      setFiles(scannedFiles);
-      
-      // Calculate stats
-      const totalSize = scannedFiles.reduce((sum, file) => sum + file.size, 0);
-      const oldFiles = scannedFiles.filter(file => file.isOld);
-      const oldFilesSize = oldFiles.reduce((sum, file) => sum + file.size, 0);
-      
-      setStats({
-        totalFiles: scannedFiles.length,
-        totalSize: formatFileSize(totalSize),
-        oldFiles: oldFiles.length,
-        oldFilesSize: formatFileSize(oldFilesSize)
-      });
+      await window.electron.fileSystem.scanFolder(selectedFolder, thresholdDays);
+      // Results will come through the event listeners
     } catch (error) {
       console.error('Error scanning folder:', error);
       alert('Error scanning folder: ' + error.message);
-    } finally {
       setLoading(false);
+    }
+  };
+  
+  // Cancel the scanning process
+  const handleCancelScan = async () => {
+    try {
+      const result = await window.electron.fileSystem.cancelScan();
+      if (result.success) {
+        setProgress(prev => ({
+          ...prev,
+          status: 'Cancelling scan...'
+        }));
+      }
+    } catch (error) {
+      console.error('Error cancelling scan:', error);
     }
   };
 
@@ -115,18 +214,9 @@ function App() {
       setFiles(prev => prev.filter(file => !deletedPaths.includes(file.path)));
       setSelectedFiles(prev => prev.filter(path => !deletedPaths.includes(path)));
       
-      // Update stats
+      // Update stats after deletion
       const remainingFiles = files.filter(file => !deletedPaths.includes(file.path));
-      const totalSize = remainingFiles.reduce((sum, file) => sum + file.size, 0);
-      const oldFiles = remainingFiles.filter(file => file.isOld);
-      const oldFilesSize = oldFiles.reduce((sum, file) => sum + file.size, 0);
-      
-      setStats({
-        totalFiles: remainingFiles.length,
-        totalSize: formatFileSize(totalSize),
-        oldFiles: oldFiles.length,
-        oldFilesSize: formatFileSize(oldFilesSize)
-      });
+      updateStats(remainingFiles);
     } catch (error) {
       console.error('Error deleting files:', error);
       alert('Error deleting files: ' + error.message);
@@ -305,6 +395,26 @@ function App() {
         );
     }
   };
+  
+  // Render progress bar
+  const renderProgressBar = () => {
+    return React.createElement(
+      'div',
+      { className: 'progress-container' },
+      React.createElement(
+        'div',
+        { 
+          className: 'progress-bar',
+          style: { width: `${progress.percent}%` }
+        }
+      ),
+      React.createElement(
+        'div',
+        { className: 'progress-text' },
+        `${progress.percent}%`
+      )
+    );
+  };
 
   return React.createElement(
     'div',
@@ -323,7 +433,7 @@ function App() {
         { className: 'folder-path' },
         React.createElement('span', { className: 'folder-path-text' }, selectedFolder || 'No folder selected')
       ),
-      React.createElement('button', { onClick: handleSelectFolder }, 'Select Folder'),
+      React.createElement('button', { onClick: handleSelectFolder, disabled: loading }, 'Select Folder'),
       
       React.createElement(
         'div',
@@ -333,7 +443,8 @@ function App() {
           'select',
           { 
             value: thresholdDays,
-            onChange: (e) => setThresholdDays(Number(e.target.value))
+            onChange: (e) => setThresholdDays(Number(e.target.value)),
+            disabled: loading
           },
           React.createElement('option', { value: '7' }, '7 days'),
           React.createElement('option', { value: '30' }, '30 days'),
@@ -363,7 +474,34 @@ function App() {
       )
     ),
     
-    stats.totalFiles > 0 && React.createElement(
+    // Progress bar and cancel button (only visible during scanning)
+    loading && React.createElement(
+      'div',
+      { className: 'scanning-info' },
+      React.createElement('div', { className: 'scanning-label' }, 'Scanning Folder'),
+      React.createElement('div', { className: 'scanning-info-text' }, progress.status),
+      renderProgressBar(),
+      React.createElement(
+        'div',
+        { className: 'scan-status' },
+        React.createElement(
+          'div',
+          null,
+          progress.processed > 0 ? `Found ${files.length.toLocaleString()} files so far` : 'Counting files...'
+        ),
+        React.createElement(
+          'button',
+          { 
+            className: 'cancel-btn',
+            onClick: handleCancelScan,
+            disabled: scanCancelled
+          },
+          scanCancelled ? 'Cancelling...' : 'Cancel Scan'
+        )
+      )
+    ),
+    
+    !loading && stats.totalFiles > 0 && React.createElement(
       'div',
       { className: 'summary' },
       React.createElement('h2', { className: 'summary-title' }, 'Scan Results'),
@@ -415,7 +553,8 @@ function App() {
               React.createElement('input', {
                 type: 'checkbox',
                 checked: selectAll,
-                onChange: handleSelectAll
+                onChange: handleSelectAll,
+                disabled: loading
               })
             ),
             React.createElement('div', null, 'Name'),
@@ -427,8 +566,8 @@ function App() {
           
           loading ? React.createElement(
             'div',
-            { className: 'loading' },
-            'Scanning folder...'
+            { className: 'loading with-progress' },
+            scanCancelled ? 'Scan cancelled.' : null
           ) : files.length === 0 && selectedFolder ? React.createElement(
             'div',
             { className: 'empty-state' },
@@ -481,7 +620,7 @@ function App() {
             )
           )),
           
-          files.length > 0 && React.createElement(
+          !loading && files.length > 0 && React.createElement(
             'div',
             { className: 'status-bar' },
             React.createElement(

@@ -13,6 +13,11 @@ if (require('electron-squirrel-startup')) {
 }
 
 let mainWindow = null;
+// Track active scan operation for cancellation
+let scanCancelled = false;
+let isScanning = false;
+let totalFilesFound = 0;
+let filesProcessed = 0;
 
 const createWindow = () => {
   // Create the browser window.
@@ -67,17 +72,83 @@ ipcMain.handle('select-folder', async () => {
   return result.filePaths[0];
 });
 
-// Scan folder for old/unused files
+// Cancel current scan operation
+ipcMain.handle('cancel-scan', async () => {
+  if (isScanning) {
+    scanCancelled = true;
+    return { success: true };
+  }
+  return { success: false, message: 'No scan in progress' };
+});
+
+// Scan folder for old/unused files with progress tracking
 ipcMain.handle('scan-folder', async (event, folderPath, oldThresholdDays) => {
+  // Reset scan state
+  scanCancelled = false;
+  isScanning = true;
+  totalFilesFound = 0;
+  filesProcessed = 0;
+  
   const files = [];
+  const batchSize = 500; // Process files in batches to prevent memory issues
   const now = new Date();
   const oldThreshold = now.getTime() - (oldThresholdDays * 24 * 60 * 60 * 1000);
   
+  // First pass: count total files (async)
+  try {
+    await countFiles(folderPath);
+    
+    // Send initial progress
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('scan-progress', {
+        processed: 0,
+        total: totalFilesFound,
+        percent: 0
+      });
+    }
+  } catch (err) {
+    console.error('Error counting files:', err);
+  }
+  
+  // Function to count total files
+  async function countFiles(dirPath) {
+    if (scanCancelled) return;
+    
+    try {
+      const entries = await readdir(dirPath, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        if (scanCancelled) return;
+        
+        const fullPath = path.join(dirPath, entry.name);
+        
+        if (entry.isDirectory()) {
+          // Skip system directories
+          if (entry.name !== '$RECYCLE.BIN' && entry.name !== 'System Volume Information') {
+            try {
+              await countFiles(fullPath);
+            } catch (err) {
+              console.error(`Error scanning directory ${fullPath}:`, err);
+            }
+          }
+        } else {
+          totalFilesFound++;
+        }
+      }
+    } catch (err) {
+      console.error(`Error reading directory ${dirPath}:`, err);
+    }
+  }
+  
   // Function to recursively scan directories
   async function scanDir(dirPath) {
+    if (scanCancelled) return;
+    
     const entries = await readdir(dirPath, { withFileTypes: true });
     
     for (const entry of entries) {
+      if (scanCancelled) return;
+      
       const fullPath = path.join(dirPath, entry.name);
       
       if (entry.isDirectory()) {
@@ -105,8 +176,28 @@ ipcMain.handle('scan-folder', async (event, folderPath, oldThresholdDays) => {
           fileInfo.sizeFormatted = formatFileSize(stats.size);
           
           files.push(fileInfo);
+          
+          // Update progress
+          filesProcessed++;
+          if (filesProcessed % 50 === 0 && !scanCancelled && mainWindow && !mainWindow.isDestroyed()) {
+            const percent = Math.min(Math.round((filesProcessed / totalFilesFound) * 100), 100);
+            mainWindow.webContents.send('scan-progress', {
+              processed: filesProcessed,
+              total: totalFilesFound,
+              percent
+            });
+          }
+          
+          // Process in batches to prevent memory issues with large folders
+          if (files.length >= batchSize) {
+            if (!scanCancelled && mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('scan-batch', files.slice());
+            }
+            files.length = 0; // Clear the array but keep the reference
+          }
         } catch (err) {
           console.error(`Error getting file stats for ${fullPath}:`, err);
+          filesProcessed++;
         }
       }
     }
@@ -114,9 +205,32 @@ ipcMain.handle('scan-folder', async (event, folderPath, oldThresholdDays) => {
   
   try {
     await scanDir(folderPath);
-    return files;
+    
+    // Send final batch if there are remaining files
+    if (files.length > 0 && !scanCancelled && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('scan-batch', files);
+    }
+    
+    // Send completion event
+    if (!scanCancelled && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('scan-complete', {
+        success: true,
+        totalFiles: totalFilesFound,
+        cancelled: false
+      });
+    } else if (scanCancelled && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('scan-complete', {
+        success: false,
+        cancelled: true
+      });
+    }
+    
+    isScanning = false;
+    // Return an empty array here, actual results are sent via IPC events
+    return { success: true, totalFilesProcessed: filesProcessed };
   } catch (err) {
     console.error('Error scanning folder:', err);
+    isScanning = false;
     throw err;
   }
 });
