@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('electron', {
     onScanBatch: (callback) => {
       ipcRenderer.on('scan-batch', (event, data) => callback(data));
     },
+    onFolderStructure: (callback) => {
+      ipcRenderer.on('folder-structure', (event, data) => callback(data));
+    },
     onScanComplete: (callback) => {
       ipcRenderer.on('scan-complete', (event, data) => callback(data));
     },

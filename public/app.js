@@ -26,6 +26,25 @@ function App() {
     status: ''
   });
   const [scanCancelled, setScanCancelled] = React.useState(false);
+  
+  // Folder navigation state
+  const [folderStructure, setFolderStructure] = React.useState(null);
+  const [currentFolder, setCurrentFolder] = React.useState(null);
+  const [expandedFolders, setExpandedFolders] = React.useState({});
+  const [filesInCurrentFolder, setFilesInCurrentFolder] = React.useState([]);
+  const [breadcrumbs, setBreadcrumbs] = React.useState([]);
+
+  // State for panel resizing
+  const [isDragging, setIsDragging] = React.useState(false);
+  const [startX, setStartX] = React.useState(0);
+  const [folderTreeWidth, setFolderTreeWidth] = React.useState(250);
+  const [previewPanelWidth, setPreviewPanelWidth] = React.useState(350);
+  
+  // References for panels
+  const folderTreePanelRef = React.useRef(null);
+  const previewPanelRef = React.useRef(null);
+  const folderTreeHandleRef = React.useRef(null);
+  const previewPanelHandleRef = React.useRef(null);
 
   // Register event listeners for scan progress and batches
   React.useEffect(() => {
@@ -54,8 +73,29 @@ function App() {
         
         // Calculate updated stats
         updateStats(newFiles);
+        
+        // Update files in current folder if a folder is selected
+        if (currentFolder) {
+          updateFilesInCurrentFolder(currentFolder, newFiles);
+        }
+        
         return newFiles;
       });
+    });
+    
+    // Listen for folder structure
+    window.electron.events.onFolderStructure((structure) => {
+      setFolderStructure(structure);
+      // Automatically expand the root folder
+      if (structure && structure.root) {
+        setExpandedFolders(prev => ({
+          ...prev,
+          [structure.root.path]: true
+        }));
+        
+        // Set current folder to root
+        handleFolderSelect(structure.root);
+      }
     });
     
     // Listen for scan completion
@@ -81,9 +121,10 @@ function App() {
     return () => {
       window.electron.events.removeAllListeners('scan-progress');
       window.electron.events.removeAllListeners('scan-batch');
+      window.electron.events.removeAllListeners('folder-structure');
       window.electron.events.removeAllListeners('scan-complete');
     };
-  }, []);
+  }, [currentFolder]);
   
   // Update stats based on files array
   const updateStats = (filesArray) => {
@@ -98,6 +139,68 @@ function App() {
       oldFilesSize: formatFileSize(oldFilesSize)
     });
   };
+  
+  // Update files shown based on selected folder
+  const updateFilesInCurrentFolder = (folder, allFiles) => {
+    if (!folder) return;
+    
+    // Filter files by the current folder
+    const filesInFolder = allFiles.filter(file => {
+      return file.parentDir === folder.path;
+    });
+    
+    setFilesInCurrentFolder(filesInFolder);
+  };
+  
+  // Handle folder selection from tree
+  const handleFolderSelect = (folder) => {
+    if (!folder) return;
+    
+    setCurrentFolder(folder);
+    updateFilesInCurrentFolder(folder, files);
+    
+    // Build breadcrumbs
+    const generateBreadcrumbs = (folderPath) => {
+      if (!folderStructure || !folderStructure.root) return [];
+      
+      // If it's the root folder
+      if (folderPath === folderStructure.root.path) {
+        return [folderStructure.root];
+      }
+      
+      // Handle nested folders
+      const relativePath = folderPath.replace(folderStructure.root.path, '');
+      const pathParts = relativePath.split(path.sep).filter(p => p);
+      
+      const breadcrumbs = [folderStructure.root];
+      let currentPath = folderStructure.root.path;
+      let currentFolderObj = folderStructure.root;
+      
+      for (const part of pathParts) {
+        currentPath = path.join(currentPath, part);
+        
+        if (currentFolderObj.subFolders && currentFolderObj.subFolders[part]) {
+          currentFolderObj = currentFolderObj.subFolders[part];
+          breadcrumbs.push(currentFolderObj);
+        } else {
+          break;
+        }
+      }
+      
+      return breadcrumbs;
+    };
+    
+    setBreadcrumbs(generateBreadcrumbs(folder.path));
+  };
+  
+  // Toggle folder expansion in tree
+  const toggleFolderExpansion = (folderPath, event) => {
+    event.stopPropagation();
+    setExpandedFolders(prev => ({
+      ...prev,
+      [folderPath]: !prev[folderPath]
+    }));
+  };
 
   // Handle folder selection
   const handleSelectFolder = async () => {
@@ -108,6 +211,10 @@ function App() {
       setSelectedFiles([]);
       setPreviewFile(null);
       setPreviewData(null);
+      setFolderStructure(null);
+      setCurrentFolder(null);
+      setFilesInCurrentFolder([]);
+      setBreadcrumbs([]);
       // Reset progress state
       setProgress({
         percent: 0,
@@ -128,6 +235,10 @@ function App() {
     setSelectedFiles([]);
     setPreviewFile(null);
     setPreviewData(null);
+    setFolderStructure(null);
+    setCurrentFolder(null);
+    setFilesInCurrentFolder([]);
+    setBreadcrumbs([]);
     setScanCancelled(false);
     
     setProgress({
@@ -178,7 +289,7 @@ function App() {
     if (selectAll) {
       setSelectedFiles([]);
     } else {
-      setSelectedFiles(files.map(file => file.path));
+      setSelectedFiles(filesInCurrentFolder.map(file => file.path));
     }
     setSelectAll(!selectAll);
   };
@@ -211,12 +322,40 @@ function App() {
         setPreviewData(null);
       }
       
-      setFiles(prev => prev.filter(file => !deletedPaths.includes(file.path)));
+      // Update main files list
+      const updatedFiles = files.filter(file => !deletedPaths.includes(file.path));
+      setFiles(updatedFiles);
+      
+      // Update current folder files
+      setFilesInCurrentFolder(prev => prev.filter(file => !deletedPaths.includes(file.path)));
+      
+      // Update selected files
       setSelectedFiles(prev => prev.filter(path => !deletedPaths.includes(path)));
       
-      // Update stats after deletion
-      const remainingFiles = files.filter(file => !deletedPaths.includes(file.path));
-      updateStats(remainingFiles);
+      // Update stats
+      updateStats(updatedFiles);
+      
+      // Update folder structure to remove deleted files
+      if (folderStructure) {
+        // This is a simplified approach - in a real app you'd need 
+        // to recursively update the folder structure
+        const updateFolderFiles = (folder) => {
+          if (folder.files) {
+            folder.files = folder.files.filter(file => !deletedPaths.includes(file.path));
+          }
+          
+          if (folder.subFolders) {
+            Object.values(folder.subFolders).forEach(subFolder => {
+              updateFolderFiles(subFolder);
+            });
+          }
+        };
+        
+        if (folderStructure.root) {
+          updateFolderFiles(folderStructure.root);
+          setFolderStructure({...folderStructure});
+        }
+      }
     } catch (error) {
       console.error('Error deleting files:', error);
       alert('Error deleting files: ' + error.message);
@@ -415,6 +554,201 @@ function App() {
       )
     );
   };
+  
+  // Render folder tree
+  const renderFolderTree = () => {
+    if (!folderStructure || !folderStructure.root) {
+      return React.createElement(
+        'div',
+        { className: 'empty-state' },
+        'No folders to display. Scan a folder to see its structure.'
+      );
+    }
+    
+    // Recursive function to render folder and its children
+    const renderFolder = (folder, level = 0) => {
+      if (!folder) return null;
+      
+      const hasSubFolders = folder.subFolders && Object.keys(folder.subFolders).length > 0;
+      const isExpanded = expandedFolders[folder.path] || false;
+      const isSelected = currentFolder && currentFolder.path === folder.path;
+      const oldFilesCount = folder.files ? folder.files.filter(f => f.isOld).length : 0;
+      
+      return React.createElement(
+        'div',
+        { key: folder.path, className: 'folder-tree-item' },
+        React.createElement(
+          'div',
+          { 
+            className: `folder-item ${isSelected ? 'selected' : ''}`,
+            onClick: () => handleFolderSelect(folder)
+          },
+          hasSubFolders ? React.createElement(
+            'span',
+            { 
+              className: `folder-toggle ${isExpanded ? 'expanded' : ''}`,
+              onClick: (e) => toggleFolderExpansion(folder.path, e)
+            },
+            '▶'
+          ) : React.createElement('span', { className: 'folder-toggle-placeholder', style: { width: '16px' } }),
+          React.createElement(
+            'div',
+            { className: 'folder-item-content' },
+            React.createElement('span', { className: 'folder-icon' }, '📁'),
+            React.createElement('span', { className: 'folder-name' }, folder.name),
+            React.createElement(
+              'span',
+              { className: 'folder-stats' },
+              `${folder.files ? folder.files.length : 0} ${oldFilesCount > 0 ? `(${oldFilesCount} old)` : ''}`
+            )
+          )
+        ),
+        hasSubFolders && isExpanded && React.createElement(
+          'div',
+          { className: 'folder-children' },
+          Object.values(folder.subFolders).map(subFolder => renderFolder(subFolder, level + 1))
+        )
+      );
+    };
+    
+    return renderFolder(folderStructure.root);
+  };
+  
+  // Render breadcrumb navigation
+  const renderBreadcrumbs = () => {
+    if (!breadcrumbs || breadcrumbs.length === 0) return null;
+    
+    return React.createElement(
+      'div',
+      { className: 'breadcrumb-nav' },
+      breadcrumbs.map((folder, index) => [
+        React.createElement(
+          'span',
+          { 
+            key: folder.path,
+            className: 'breadcrumb-item',
+            onClick: () => handleFolderSelect(folder)
+          },
+          index === 0 ? 'Root' : folder.name
+        ),
+        index < breadcrumbs.length - 1 && React.createElement(
+          'span',
+          { key: `${folder.path}-separator`, className: 'breadcrumb-separator' },
+          '/'
+        )
+      ].flat())
+    );
+  };
+
+  // Handle folder tree panel resizing
+  const handleFolderTreeDragStart = (e) => {
+    setIsDragging(true);
+    setStartX(e.clientX);
+    document.body.style.cursor = 'col-resize';
+    
+    // Add dragging class to handle
+    if (folderTreeHandleRef.current) {
+      folderTreeHandleRef.current.classList.add('active');
+    }
+    
+    // Add event listeners for mousemove and mouseup
+    document.addEventListener('mousemove', handleFolderTreeDrag);
+    document.addEventListener('mouseup', handleDragEnd);
+  };
+  
+  const handleFolderTreeDrag = (e) => {
+    if (!isDragging) return;
+    
+    const delta = e.clientX - startX;
+    const newWidth = Math.max(150, Math.min(window.innerWidth * 0.4, folderTreeWidth + delta));
+    
+    if (folderTreePanelRef.current) {
+      folderTreePanelRef.current.style.width = `${newWidth}px`;
+    }
+    
+    setStartX(e.clientX);
+    setFolderTreeWidth(newWidth);
+  };
+  
+  // Handle preview panel resizing
+  const handlePreviewPanelDragStart = (e) => {
+    setIsDragging(true);
+    setStartX(e.clientX);
+    document.body.style.cursor = 'col-resize';
+    
+    // Add dragging class to handle
+    if (previewPanelHandleRef.current) {
+      previewPanelHandleRef.current.classList.add('active');
+    }
+    
+    // Add event listeners for mousemove and mouseup
+    document.addEventListener('mousemove', handlePreviewPanelDrag);
+    document.addEventListener('mouseup', handleDragEnd);
+  };
+  
+  const handlePreviewPanelDrag = (e) => {
+    if (!isDragging) return;
+    
+    const delta = startX - e.clientX;
+    const newWidth = Math.max(200, Math.min(window.innerWidth * 0.5, previewPanelWidth + delta));
+    
+    if (previewPanelRef.current) {
+      previewPanelRef.current.style.width = `${newWidth}px`;
+    }
+    
+    setStartX(e.clientX);
+    setPreviewPanelWidth(newWidth);
+  };
+  
+  // Common drag end handler
+  const handleDragEnd = () => {
+    setIsDragging(false);
+    document.body.style.cursor = '';
+    
+    // Remove active class from handles
+    if (folderTreeHandleRef.current) {
+      folderTreeHandleRef.current.classList.remove('active');
+    }
+    
+    if (previewPanelHandleRef.current) {
+      previewPanelHandleRef.current.classList.remove('active');
+    }
+    
+    // Remove event listeners
+    document.removeEventListener('mousemove', handleFolderTreeDrag);
+    document.removeEventListener('mousemove', handlePreviewPanelDrag);
+    document.removeEventListener('mouseup', handleDragEnd);
+  };
+  
+  // Handle window resize
+  React.useEffect(() => {
+    const handleResize = () => {
+      // Reset panel widths if they exceed window bounds
+      const maxWidth = window.innerWidth * 0.9;
+      
+      if (folderTreeWidth + previewPanelWidth > maxWidth) {
+        const newFolderTreeWidth = Math.min(folderTreeWidth, window.innerWidth * 0.3);
+        const newPreviewPanelWidth = Math.min(previewPanelWidth, window.innerWidth * 0.3);
+        
+        setFolderTreeWidth(newFolderTreeWidth);
+        setPreviewPanelWidth(newPreviewPanelWidth);
+        
+        if (folderTreePanelRef.current) {
+          folderTreePanelRef.current.style.width = `${newFolderTreeWidth}px`;
+        }
+        
+        if (previewPanelRef.current) {
+          previewPanelRef.current.style.width = `${newPreviewPanelWidth}px`;
+        }
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [folderTreeWidth, previewPanelWidth]);
 
   return React.createElement(
     'div',
@@ -538,100 +872,141 @@ function App() {
     React.createElement(
       'div',
       { className: 'main-content' },
+      
+      // Folder tree panel
       React.createElement(
         'div',
-        { className: 'files-panel' },
+        { 
+          className: 'folder-tree-panel',
+          ref: folderTreePanelRef,
+          style: { width: folderTreeWidth + 'px' }
+        },
         React.createElement(
           'div',
-          { className: 'file-list' },
-          files.length > 0 && React.createElement(
-            'div',
-            { className: 'file-list-header' },
-            React.createElement(
-              'div',
-              { className: 'checkbox-container' },
-              React.createElement('input', {
-                type: 'checkbox',
-                checked: selectAll,
-                onChange: handleSelectAll,
-                disabled: loading
-              })
-            ),
-            React.createElement('div', null, 'Name'),
-            React.createElement('div', null, 'Size'),
-            React.createElement('div', null, 'Last Accessed'),
-            React.createElement('div', null, 'Last Modified'),
-            React.createElement('div', null, '')
-          ),
+          { className: 'folder-tree-header' },
+          'Folders'
+        ),
+        React.createElement(
+          'div',
+          { className: 'folder-tree' },
+          renderFolderTree()
+        ),
+        React.createElement(
+          'div',
+          { 
+            className: 'panel-drag-handle folder-tree-handle',
+            ref: folderTreeHandleRef,
+            onMouseDown: handleFolderTreeDragStart 
+          }
+        )
+      ),
+      
+      // Files panel container
+      React.createElement(
+        'div',
+        { className: 'files-panel-container' },
+        React.createElement(
+          'div',
+          { className: 'files-panel' },
+          // Breadcrumb navigation
+          currentFolder && renderBreadcrumbs(),
           
-          loading ? React.createElement(
+          React.createElement(
             'div',
-            { className: 'loading with-progress' },
-            scanCancelled ? 'Scan cancelled.' : null
-          ) : files.length === 0 && selectedFolder ? React.createElement(
-            'div',
-            { className: 'empty-state' },
-            'No files found. Try scanning the folder.'
-          ) : files.length === 0 ? React.createElement(
-            'div',
-            { className: 'empty-state' },
-            'Select a folder to start scanning'
-          ) : files.map((file) => React.createElement(
-            'div',
-            {
-              key: file.path,
-              className: `file-item ${file.isOld ? 'old' : ''} ${previewFile && previewFile.path === file.path ? 'selected' : ''}`,
-              onClick: () => handlePreviewFile(file)
-            },
-            React.createElement(
+            { className: 'file-list' },
+            filesInCurrentFolder.length > 0 && React.createElement(
               'div',
-              { className: 'checkbox-container', onClick: (e) => e.stopPropagation() },
-              React.createElement('input', {
-                type: 'checkbox',
-                checked: isFileSelected(file.path),
-                onChange: () => handleSelectFile(file.path)
-              })
+              { className: 'file-list-header' },
+              React.createElement(
+                'div',
+                { className: 'checkbox-container' },
+                React.createElement('input', {
+                  type: 'checkbox',
+                  checked: selectAll,
+                  onChange: handleSelectAll,
+                  disabled: loading
+                })
+              ),
+              React.createElement('div', null, 'Name'),
+              React.createElement('div', null, 'Size'),
+              React.createElement('div', null, 'Last Accessed'),
+              React.createElement('div', null, 'Last Modified'),
+              React.createElement('div', null, '')
             ),
+            
             React.createElement(
               'div', 
-              { className: 'file-name', title: file.name },
-              getFileTypeIcon(file.name),
-              ' ',
-              file.name
-            ),
-            React.createElement('div', null, file.sizeFormatted),
-            React.createElement('div', { className: 'file-date' }, formatDate(file.lastAccessed)),
-            React.createElement('div', { className: 'file-date' }, formatDate(file.lastModified)),
-            React.createElement(
-              'div',
-              { className: 'file-actions', onClick: (e) => e.stopPropagation() },
-              React.createElement(
-                'button',
+              { className: 'files-scrollable' },
+              loading ? React.createElement(
+                'div',
+                { className: 'loading with-progress' },
+                scanCancelled ? 'Scan cancelled.' : null
+              ) : filesInCurrentFolder.length === 0 && currentFolder ? React.createElement(
+                'div',
+                { className: 'empty-state' },
+                'No files in this folder.'
+              ) : !currentFolder ? React.createElement(
+                'div',
+                { className: 'empty-state' },
+                'Select a folder to view its files'
+              ) : filesInCurrentFolder.map((file) => React.createElement(
+                'div',
                 {
-                  className: 'delete-btn',
-                  onClick: (e) => {
-                    e.stopPropagation();
-                    setSelectedFiles([file.path]);
-                    handleDeleteFiles();
-                  }
+                  key: file.path,
+                  className: `file-item ${file.isOld ? 'old' : ''} ${previewFile && previewFile.path === file.path ? 'selected' : ''}`,
+                  onClick: () => handlePreviewFile(file)
                 },
-                'Delete'
-              )
-            )
-          )),
-          
-          !loading && files.length > 0 && React.createElement(
-            'div',
-            { className: 'status-bar' },
-            React.createElement(
-              'div',
-              null,
-              `${selectedFiles.length} of ${files.length} files selected`
+                React.createElement(
+                  'div',
+                  { className: 'checkbox-container', onClick: (e) => e.stopPropagation() },
+                  React.createElement('input', {
+                    type: 'checkbox',
+                    checked: isFileSelected(file.path),
+                    onChange: () => handleSelectFile(file.path)
+                  })
+                ),
+                React.createElement(
+                  'div', 
+                  { className: 'file-name', title: file.name },
+                  getFileTypeIcon(file.name),
+                  ' ',
+                  file.name
+                ),
+                React.createElement('div', null, file.sizeFormatted),
+                React.createElement('div', { className: 'file-date' }, formatDate(file.lastAccessed)),
+                React.createElement('div', { className: 'file-date' }, formatDate(file.lastModified)),
+                React.createElement(
+                  'div',
+                  { className: 'file-actions', onClick: (e) => e.stopPropagation() },
+                  React.createElement(
+                    'button',
+                    {
+                      className: 'delete-btn',
+                      onClick: (e) => {
+                        e.stopPropagation();
+                        setSelectedFiles([file.path]);
+                        handleDeleteFiles();
+                      }
+                    },
+                    'Delete'
+                  )
+                )
+              ))
             ),
-            React.createElement(
+            
+            !loading && filesInCurrentFolder.length > 0 && React.createElement(
               'div',
-              null,
-              `${files.filter(f => f.isOld).length} unused files found`
+              { className: 'status-bar' },
+              React.createElement(
+                'div',
+                null,
+                `${selectedFiles.length} of ${filesInCurrentFolder.length} files selected`
+              ),
+              React.createElement(
+                'div',
+                null,
+                `${filesInCurrentFolder.filter(f => f.isOld).length} unused files found in this folder`
+              )
             )
           )
         )
@@ -640,7 +1015,19 @@ function App() {
       // Preview Panel
       React.createElement(
         'div',
-        { className: 'preview-panel' },
+        { 
+          className: 'preview-panel',
+          ref: previewPanelRef,
+          style: { width: previewPanelWidth + 'px' }
+        },
+        React.createElement(
+          'div',
+          { 
+            className: 'panel-drag-handle preview-panel-handle',
+            ref: previewPanelHandleRef,
+            onMouseDown: handlePreviewPanelDragStart 
+          }
+        ),
         previewFile ? React.createElement(
           React.Fragment,
           null,
@@ -691,6 +1078,32 @@ function App() {
     )
   );
 }
+
+// Helper function for path manipulation
+const path = {
+  join: (...parts) => parts.join('/').replace(/\/+/g, '/'),
+  sep: '/',
+  basename: (path) => path.split('/').pop(),
+  dirname: (path) => {
+    const parts = path.split('/');
+    parts.pop();
+    return parts.join('/') || '/';
+  },
+  relative: (from, to) => {
+    // Simple implementation for relative path
+    const fromParts = from.split('/').filter(Boolean);
+    const toParts = to.split('/').filter(Boolean);
+    
+    let commonIndex = 0;
+    while (commonIndex < fromParts.length && commonIndex < toParts.length && 
+           fromParts[commonIndex] === toParts[commonIndex]) {
+      commonIndex++;
+    }
+    
+    const relativeParts = toParts.slice(commonIndex);
+    return relativeParts.join('/') || '.';
+  }
+};
 
 // Render the App component
 ReactDOM.render(

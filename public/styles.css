@@ -9,20 +9,25 @@ body {
   background-color: #f5f5f5;
   color: #333;
   line-height: 1.6;
+  overflow: hidden;
 }
 
 .container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
+  max-width: 100%;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .app-header {
   background-color: #3498db;
   color: white;
   padding: 16px 20px;
-  border-radius: 8px 8px 0 0;
-  margin-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  z-index: 10;
 }
 
 .app-title {
@@ -33,9 +38,12 @@ body {
 .control-panel {
   display: flex;
   gap: 15px;
-  margin-bottom: 20px;
+  padding: 15px 20px;
   align-items: center;
   flex-wrap: wrap;
+  background-color: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  z-index: 5;
 }
 
 .folder-path {
@@ -43,10 +51,11 @@ body {
   padding: 8px 12px;
   border: 1px solid #ccc;
   border-radius: 4px;
-  background-color: #fff;
+  background-color: #f9f9f9;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  min-width: 200px;
 }
 
 .folder-path-text {
@@ -63,16 +72,25 @@ button {
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
-  transition: background-color 0.2s;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 button:hover {
   background-color: #2980b9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+button:active {
+  transform: translateY(0);
 }
 
 button:disabled {
   background-color: #95a5a6;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .delete-btn {
@@ -88,6 +106,9 @@ button:disabled {
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .file-list-header {
@@ -97,6 +118,9 @@ button:disabled {
   background-color: #f0f0f0;
   font-weight: bold;
   border-bottom: 1px solid #ddd;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .file-item {
@@ -105,20 +129,32 @@ button:disabled {
   padding: 12px 16px;
   border-bottom: 1px solid #eee;
   align-items: center;
+  transition: background-color 0.2s;
 }
 
 .file-item:nth-child(even) {
   background-color: #f9f9f9;
 }
 
+.file-item:hover {
+  background-color: #f0f8ff;
+}
+
 .file-item.old {
   background-color: #ffeeee;
+}
+
+.file-item.old:hover {
+  background-color: #ffe0e0;
 }
 
 .file-name {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .file-actions {
@@ -134,12 +170,14 @@ button:disabled {
 }
 
 .status-bar {
-  margin-top: 20px;
-  padding: 10px;
+  margin-top: auto;
+  padding: 10px 16px;
   background-color: #ecf0f1;
-  border-radius: 4px;
+  border-top: 1px solid #ddd;
   display: flex;
   justify-content: space-between;
+  font-size: 12px;
+  color: #555;
 }
 
 .checkbox-container {
@@ -149,6 +187,7 @@ button:disabled {
 
 input[type="checkbox"] {
   margin-right: 8px;
+  cursor: pointer;
 }
 
 .file-date {
@@ -165,16 +204,30 @@ input[type="checkbox"] {
   padding: 8px;
   border-radius: 4px;
   border: 1px solid #ccc;
+  background-color: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.threshold-selector select:hover {
+  border-color: #3498db;
+}
+
+.threshold-selector select:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
 }
 
 .empty-state {
   text-align: center;
   padding: 40px;
   color: #777;
+  font-style: italic;
 }
 
 .summary {
-  margin-top: 20px;
+  margin: 15px 20px;
   background-color: white;
   border-radius: 8px;
   padding: 16px;
@@ -184,6 +237,7 @@ input[type="checkbox"] {
 .summary-title {
   font-size: 18px;
   margin-bottom: 12px;
+  color: #333;
 }
 
 .summary-stats {
@@ -197,6 +251,12 @@ input[type="checkbox"] {
   border-radius: 6px;
   padding: 12px;
   text-align: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .stat-value {
@@ -206,33 +266,57 @@ input[type="checkbox"] {
   margin-bottom: 4px;
 }
 
+.stat-label {
+  font-size: 14px;
+  color: #555;
+}
+
 .app-layout {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 40px);
+  height: 100vh;
+  overflow: hidden;
 }
 
 .main-content {
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;
+}
+
+.files-panel-container {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .files-panel {
-  flex: 1;
   overflow: auto;
-  margin-right: 10px;
+  flex: 1;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.files-scrollable {
+  overflow-y: auto;
+  flex: 1;
 }
 
 .preview-panel {
   width: 350px;
-  background-color: white;
-  border-radius: 8px;
-  padding: 15px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  overflow: auto;
+  min-width: 200px;
+  max-width: 50%;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
+  padding: 15px;
+  background-color: white;
+  border-left: 1px solid #e0e0e0;
+  resize: horizontal;
 }
 
 .preview-empty {
@@ -284,17 +368,24 @@ input[type="checkbox"] {
   align-items: center;
   justify-content: center;
   min-height: 200px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  padding: 10px;
 }
 
 .preview-image {
   max-width: 100%;
   max-height: 400px;
   object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
 .preview-video, .preview-audio {
   width: 100%;
   max-height: 300px;
+  border-radius: 4px;
+  background-color: #000;
 }
 
 .preview-text {
@@ -308,6 +399,7 @@ input[type="checkbox"] {
   font-family: monospace;
   font-size: 13px;
   color: #333;
+  border: 1px solid #ddd;
 }
 
 .preview-large-file {
@@ -349,18 +441,7 @@ input[type="checkbox"] {
   to { transform: rotate(360deg); }
 }
 
-@media (max-width: 800px) {
-  .main-content {
-    flex-direction: column;
-  }
-  
-  .preview-panel {
-    width: 100%;
-    margin-top: 15px;
-    max-height: 400px;
-  }
-}
-
+/* Progress bar and scanning */
 .progress-container {
   width: 100%;
   background-color: #f5f5f5;
@@ -369,16 +450,25 @@ input[type="checkbox"] {
   position: relative;
   height: 20px;
   overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .progress-bar {
   height: 100%;
   background-color: #3498db;
+  background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.15) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.15) 75%, transparent 75%, transparent);
+  background-size: 16px 16px;
   border-radius: 4px;
   transition: width 0.3s ease;
   display: flex;
   align-items: center;
   justify-content: center;
+  animation: progress-animation 1s linear infinite;
+}
+
+@keyframes progress-animation {
+  0% { background-position: 0 0; }
+  100% { background-position: 16px 0; }
 }
 
 .progress-text {
@@ -388,7 +478,7 @@ input[type="checkbox"] {
   color: #333;
   font-size: 12px;
   font-weight: bold;
-  mix-blend-mode: difference;
+  text-shadow: 0 0 2px rgba(255, 255, 255, 0.8);
   white-space: nowrap;
 }
 
@@ -416,7 +506,11 @@ input[type="checkbox"] {
 }
 
 .scanning-info {
-  margin-bottom: 10px;
+  margin: 10px 20px;
+  padding: 15px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -427,7 +521,6 @@ input[type="checkbox"] {
   color: #666;
 }
 
-/* Override some existing styles for better UI during scanning */
 .loading.with-progress {
   padding: 20px;
   font-size: 18px;
@@ -441,7 +534,6 @@ input[type="checkbox"] {
   margin-bottom: 15px;
 }
 
-/* Add a pulsating animation for the scanning text */
 @keyframes pulse {
   0% { opacity: 0.6; }
   50% { opacity: 1; }
@@ -453,4 +545,315 @@ input[type="checkbox"] {
   font-weight: bold;
   color: #3498db;
   margin-bottom: 10px;
+}
+
+/* Folder tree panel styles */
+.folder-tree-panel {
+  width: 250px;
+  min-width: 150px;
+  max-width: 40%;
+  background-color: white;
+  border-right: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  resize: horizontal;
+  overflow: hidden;
+}
+
+.folder-tree {
+  margin-top: 10px;
+  overflow: auto;
+  flex: 1;
+  padding: 0 10px 10px 10px;
+}
+
+.folder-tree-header {
+  font-weight: bold;
+  margin: 15px 15px 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  background-color: white;
+  z-index: 1;
+}
+
+.folder-item {
+  padding: 6px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  margin: 2px 0;
+  transition: background-color 0.2s;
+}
+
+.folder-item:hover {
+  background-color: #f0f8ff;
+}
+
+.folder-item.selected {
+  background-color: #e3f2fd;
+}
+
+.folder-item-content {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  overflow: hidden;
+}
+
+.folder-icon {
+  margin-right: 5px;
+  font-size: 16px;
+  color: #555;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.folder-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-stats {
+  font-size: 12px;
+  color: #999;
+  margin-left: 5px;
+  flex-shrink: 0;
+}
+
+.folder-children {
+  margin-left: 20px;
+  overflow: hidden;
+}
+
+.folder-toggle {
+  margin-right: 5px;
+  cursor: pointer;
+  transition: transform 0.2s;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.folder-toggle.expanded {
+  transform: rotate(90deg);
+}
+
+.folder-empty {
+  margin-left: 25px;
+  color: #aaa;
+  font-style: italic;
+  font-size: 12px;
+}
+
+/* Breadcrumb navigation */
+.breadcrumb-nav {
+  margin: 15px;
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  white-space: nowrap;
+  padding: 8px 12px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  scrollbar-width: thin;
+}
+
+.breadcrumb-nav::-webkit-scrollbar {
+  height: 4px;
+}
+
+.breadcrumb-nav::-webkit-scrollbar-thumb {
+  background-color: #ccc;
+  border-radius: 4px;
+}
+
+.breadcrumb-item {
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.breadcrumb-item:hover {
+  background-color: #e3f2fd;
+}
+
+.breadcrumb-separator {
+  margin: 0 5px;
+  color: #999;
+}
+
+/* Resize handles */
+.resize-handle-h {
+  width: 8px;
+  background: transparent;
+  cursor: col-resize;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 10;
+}
+
+.resize-handle-h:hover, .resize-handle-h.active {
+  background: rgba(52, 152, 219, 0.2);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
+
+/* Make scrollbars consistently styled in Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #ccc #f1f1f1;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .folder-tree-panel {
+    width: 200px;
+  }
+  
+  .preview-panel {
+    width: 300px;
+  }
+}
+
+@media (max-width: 992px) {
+  .main-content {
+    flex-direction: column;
+  }
+  
+  .folder-tree-panel {
+    width: 100%;
+    height: 300px;
+    min-height: 150px;
+    max-height: 30%;
+    max-width: none;
+    resize: vertical;
+    border-right: none;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  
+  .files-panel-container {
+    flex: 1;
+    min-height: 0;
+  }
+  
+  .preview-panel {
+    width: 100%;
+    max-width: none;
+    height: 350px;
+    min-height: 200px;
+    max-height: 40%;
+    resize: vertical;
+    border-left: none;
+    border-top: 1px solid #e0e0e0;
+  }
+  
+  .resize-handle-h {
+    display: none;
+  }
+  
+  .resize-handle-v {
+    height: 8px;
+    background: transparent;
+    cursor: row-resize;
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 10;
+  }
+  
+  .resize-handle-v:hover, .resize-handle-v.active {
+    background: rgba(52, 152, 219, 0.2);
+  }
+}
+
+@media (max-width: 768px) {
+  .control-panel {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .folder-path {
+    width: 100%;
+  }
+  
+  .threshold-selector {
+    justify-content: space-between;
+    width: 100%;
+  }
+  
+  .file-list-header, .file-item {
+    grid-template-columns: 30px 2fr 1fr 1fr 60px;
+  }
+  
+  .file-item > div:nth-child(5) {
+    display: none;
+  }
+  
+  .file-list-header > div:nth-child(5) {
+    display: none;
+  }
+}
+
+/* Draggable handle styles */
+.panel-drag-handle {
+  height: 100%;
+  width: 10px;
+  cursor: col-resize;
+  position: absolute;
+  top: 0;
+  z-index: 100;
+  background-color: transparent;
+  transition: background-color 0.2s;
+}
+
+.panel-drag-handle:hover {
+  background-color: rgba(52, 152, 219, 0.1);
+}
+
+.panel-drag-handle.active {
+  background-color: rgba(52, 152, 219, 0.2);
+}
+
+/* Folder tree right handle */
+.folder-tree-handle {
+  right: 0;
+}
+
+/* Preview panel left handle */
+.preview-panel-handle {
+  left: 0;
 } 

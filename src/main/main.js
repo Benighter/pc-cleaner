@@ -90,6 +90,7 @@ ipcMain.handle('scan-folder', async (event, folderPath, oldThresholdDays) => {
   filesProcessed = 0;
   
   const files = [];
+  const folderStructure = {};
   const batchSize = 500; // Process files in batches to prevent memory issues
   const now = new Date();
   const oldThreshold = now.getTime() - (oldThresholdDays * 24 * 60 * 60 * 1000);
@@ -140,6 +141,80 @@ ipcMain.handle('scan-folder', async (event, folderPath, oldThresholdDays) => {
     }
   }
   
+  // Create folder structure object
+  function addToFolderStructure(filePath, fileObj, basePath) {
+    // Get relative path from base scan folder
+    const relativePath = path.relative(basePath, filePath);
+    const dirPath = path.dirname(relativePath);
+    
+    if (dirPath === '.') {
+      // File is in the root scan directory
+      if (!folderStructure.root) {
+        folderStructure.root = {
+          name: path.basename(basePath),
+          path: basePath,
+          files: [],
+          isRoot: true
+        };
+      }
+      folderStructure.root.files.push(fileObj);
+    } else {
+      // File is in a subdirectory
+      const pathParts = dirPath.split(path.sep);
+      let currentLevel = folderStructure;
+      let currentPath = basePath;
+      
+      // Build folder structure along the path
+      for (let i = 0; i < pathParts.length; i++) {
+        const part = pathParts[i];
+        currentPath = path.join(currentPath, part);
+        
+        if (i === 0) {
+          // First level
+          if (!currentLevel.root) {
+            currentLevel.root = {
+              name: path.basename(basePath),
+              path: basePath,
+              files: [],
+              subFolders: {},
+              isRoot: true
+            };
+          }
+          if (!currentLevel.root.subFolders) {
+            currentLevel.root.subFolders = {};
+          }
+          if (!currentLevel.root.subFolders[part]) {
+            currentLevel.root.subFolders[part] = {
+              name: part,
+              path: currentPath,
+              files: [],
+              subFolders: {}
+            };
+          }
+          currentLevel = currentLevel.root.subFolders;
+        } else {
+          // Nested levels
+          if (!currentLevel[pathParts[i-1]].subFolders) {
+            currentLevel[pathParts[i-1]].subFolders = {};
+          }
+          if (!currentLevel[pathParts[i-1]].subFolders[part]) {
+            currentLevel[pathParts[i-1]].subFolders[part] = {
+              name: part,
+              path: currentPath,
+              files: [],
+              subFolders: {}
+            };
+          }
+          currentLevel = currentLevel[pathParts[i-1]].subFolders;
+        }
+      }
+      
+      // Add file to appropriate folder
+      const lastFolder = pathParts[pathParts.length - 1];
+      currentLevel[lastFolder].files.push(fileObj);
+    }
+  }
+  
   // Function to recursively scan directories
   async function scanDir(dirPath) {
     if (scanCancelled) return;
@@ -169,13 +244,18 @@ ipcMain.handle('scan-folder', async (event, folderPath, oldThresholdDays) => {
             size: stats.size,
             lastAccessed: stats.atime,
             lastModified: stats.mtime,
-            isOld: stats.atime.getTime() < oldThreshold
+            isOld: stats.atime.getTime() < oldThreshold,
+            parentDir: path.dirname(fullPath)
           };
           
           // Convert file size to readable format
           fileInfo.sizeFormatted = formatFileSize(stats.size);
           
+          // Add to the files array
           files.push(fileInfo);
+          
+          // Add to folder structure
+          addToFolderStructure(fullPath, fileInfo, folderPath);
           
           // Update progress
           filesProcessed++;
@@ -208,7 +288,12 @@ ipcMain.handle('scan-folder', async (event, folderPath, oldThresholdDays) => {
     
     // Send final batch if there are remaining files
     if (files.length > 0 && !scanCancelled && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('scan-batch', files);
+      mainWindow.webContents.send('scan-batch', files.slice());
+    }
+    
+    // Send folder structure
+    if (!scanCancelled && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('folder-structure', folderStructure);
     }
     
     // Send completion event
